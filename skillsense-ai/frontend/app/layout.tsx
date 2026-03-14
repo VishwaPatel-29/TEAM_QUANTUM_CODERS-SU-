@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import SplashScreen from "../components/SplashScreen";
+import ChatWidgetLoader from '../components/ChatWidgetLoader';
 
 export const metadata: Metadata = {
     title: "SkillSense AI — Measuring Skills, Predicting Futures",
@@ -28,7 +29,9 @@ export default function RootLayout({
             </head>
             <body style={{ background: '#050a14' }}>
                 <SplashScreen>{children}</SplashScreen>
+                <ChatWidgetLoader />
             </body>
         </html>
     );
 }
+

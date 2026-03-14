@@ -91,6 +91,43 @@ export default function AuthPage() {
         setTimeout(() => setToast(null), 4000);
     };
 
+    // ── Demo auto-login ───────────────────────────────────────────────────────
+    useEffect(() => {
+        const demoRole = searchParams.get('demo');
+        if (!demoRole) return;
+
+        const DEMO = {
+            student:    { email: 'student@skillsense.demo',    password: 'Demo@1234', role: 'student' },
+            admin:      { email: 'admin@skillsense.demo',      password: 'Demo@1234', role: 'admin' },
+            instructor: { email: 'instructor@skillsense.demo', password: 'Demo@1234', role: 'instructor' },
+        } as const;
+
+        const creds = DEMO[demoRole as keyof typeof DEMO];
+        if (!creds) return;
+
+        // Pre-fill
+        setEmail(creds.email);
+        setPassword(creds.password);
+        setSelected(creds.role === 'instructor' ? 'student' : creds.role); // map instructor → student role button
+        setTab('signin');
+
+        // Auto-submit after 800ms so user sees what's happening
+        const timer = setTimeout(() => {
+            login(creds.email, creds.password)
+                .then(() => {
+                    const roleHref = creds.role === 'admin' ? '/admin' : creds.role === 'instructor' ? '/student' : '/student';
+                    localStorage.setItem('ss_user', JSON.stringify({ name: `Demo ${creds.role.charAt(0).toUpperCase() + creds.role.slice(1)}`, role: creds.role, email: creds.email, isDemo: true }));
+                    setShowOverlay(true);
+                    setTimeout(() => { setOverlayOut(true); setTimeout(() => { router.push(roleHref); }, 400); }, 2000);
+                })
+                .catch(() => {
+                    showToast('Demo login failed. Run: npm run seed:demo in backend first.', 'error');
+                });
+        }, 800);
+        return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const handleSubmit = async (e?: React.FormEvent) => {
         e?.preventDefault();
         if (submitting) return;

@@ -17,6 +17,7 @@ import analyticsRouter from './routes/analytics.routes';
 import governanceRouter from './routes/governance.routes';
 import adminRouter from './routes/admin.routes';
 import contactRouter from './routes/contact.routes';
+import aiRouter from './routes/ai.routes';
 
 const app = express();
 
@@ -85,6 +86,7 @@ app.use('/api/v1/analytics', analyticsRouter);
 app.use('/api/v1/governance', governanceRouter);
 app.use('/api/v1/admin', adminRouter);
 app.use('/api/v1/contact', contactRouter);
+app.use('/api/v1/ai', aiRouter);
 
 // ── 404 Handler ────────────────────────────────────────────────────────────
 app.use((_req, res) => {
