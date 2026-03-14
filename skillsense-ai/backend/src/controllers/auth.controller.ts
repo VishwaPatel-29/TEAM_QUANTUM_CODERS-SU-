@@ -2,6 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import User from '../models/User.model';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import { z } from 'zod';
+
+const emailSchema = z.string().email();
 
 const generateToken = (id: string, role: string): string => {
   return jwt.sign(
@@ -21,6 +24,16 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
         success: false,
         data: null,
         message: 'Name, email and password are required',
+      });
+    }
+
+    // 1b. Validate email format
+    const emailResult = emailSchema.safeParse(email);
+    if (!emailResult.success) {
+      return res.status(400).json({
+        success: false,
+        data: null,
+        message: 'Please provide a valid email address',
       });
     }
 
@@ -127,6 +140,15 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
         success: false,
         data: null,
         message: `This account uses ${user.authProvider} login. Please sign in with ${user.authProvider}.`,
+      });
+    }
+
+    // Check if account is active (suspended check)
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        data: null,
+        message: 'Your account has been suspended. Please contact admin.',
       });
     }
 

@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react';
 import type React from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useAuthStore } from '../../store/authStore';
 import './auth.css';
+
 
 /* ── SVG Icons for each role ─────────────────────────────── */
 const RoleIcons: Record<string, React.ReactElement> = {
@@ -65,6 +67,9 @@ function Particles() {
 
 export default function AuthPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const { login, register: registerUser } = useAuthStore();
+
     const [selected, setSelected] = useState<string | null>(null);
     const [tab, setTab] = useState<'signin' | 'signup'>('signin');
     const [name, setName] = useState('');
@@ -74,29 +79,62 @@ export default function AuthPage() {
     const [showOverlay, setShowOverlay] = useState(false);
     const [overlayOut, setOverlayOut] = useState(false);
     const [toast, setToast] = useState<string | null>(null);
-    const redirectRef = useRef<NodeJS.Timeout | null>(null);
+    const [toastType, setToastType] = useState<'success' | 'error'>('success');
+    const [submitting, setSubmitting] = useState(false);
+    const redirectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const selectedRole = ROLES.find(r => r.key === selected);
 
-    const handleSubmit = (e?: React.FormEvent) => {
+    const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+        setToast(msg);
+        setToastType(type);
+        setTimeout(() => setToast(null), 4000);
+    };
+
+    const handleSubmit = async (e?: React.FormEvent) => {
         e?.preventDefault();
+        if (submitting) return;
+
         const role = selectedRole?.key || 'student';
-        const userName = name.trim() || email.split('@')[0] || 'User';
-        localStorage.setItem('ss_user', JSON.stringify({ name: userName, role, email }));
-        setShowOverlay(true);
-        redirectRef.current = setTimeout(() => {
-            setOverlayOut(true);
-            setTimeout(() => {
-                setShowOverlay(false);
-                setOverlayOut(false);
-                setToast('Signed in successfully');
-                setTimeout(() => setToast(null), 3000);
-                router.push(selectedRole?.href || '/student');
-            }, 400);
-        }, 3000);
+
+        setSubmitting(true);
+        try {
+            if (tab === 'signin') {
+                await login(email, password);
+            } else {
+                await registerUser(name, email, password, role as import('../../store/authStore').UserRole);
+            }
+
+            // Persist display info for the sidebar
+            const userName = name.trim() || email.split('@')[0] || 'User';
+            localStorage.setItem('ss_user', JSON.stringify({ name: userName, role, email }));
+
+            // Show the animated sign-in overlay
+            setShowOverlay(true);
+            redirectRef.current = setTimeout(() => {
+                setOverlayOut(true);
+                setTimeout(() => {
+                    setShowOverlay(false);
+                    setOverlayOut(false);
+                    showToast('Signed in successfully');
+                    // Respect the ?redirect= param set by middleware, else go to role dashboard
+                    const redirectTo = searchParams.get('redirect') || selectedRole?.href || `/${role}`;
+                    router.push(redirectTo);
+                }, 400);
+            }, 2000);
+
+        } catch (err: unknown) {
+            const msg = (err as { response?: { data?: { message?: string } } })
+                ?.response?.data?.message ?? 'Sign in failed. Please check your credentials.';
+            showToast(msg, 'error');
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     useEffect(() => () => { if (redirectRef.current) clearTimeout(redirectRef.current); }, []);
+
+
 
     return (
         <>
@@ -200,11 +238,13 @@ export default function AuthPage() {
                             </label>
                         )}
 
-                        <button type="submit" className="auth-btn">
-                            <span>{tab === 'signin' ? `Sign In${selectedRole ? ` as ${selectedRole.label}` : ''}` : 'Create Account'}</span>
-                            <span style={{ display: 'flex', alignItems: 'center', transition: 'transform 0.2s' }}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
-                            </span>
+                        <button type="submit" className="auth-btn" disabled={submitting} style={{ opacity: submitting ? 0.75 : 1 }}>
+                            <span>{submitting ? 'Signing in…' : (tab === 'signin' ? `Sign In${selectedRole ? ` as ${selectedRole.label}` : ''}` : 'Create Account')}</span>
+                            {!submitting && (
+                                <span style={{ display: 'flex', alignItems: 'center', transition: 'transform 0.2s' }}>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+                                </span>
+                            )}
                             <span className="auth-btn-shimmer" />
                         </button>
                     </form>
@@ -270,7 +310,7 @@ export default function AuthPage() {
 
             {/* Toast */}
             {toast && (
-                <div className="auth-toast">{toast}</div>
+                <div className="auth-toast" style={{ background: toastType === 'error' ? 'rgba(239,68,68,0.15)' : undefined, borderColor: toastType === 'error' ? 'rgba(239,68,68,0.4)' : undefined, color: toastType === 'error' ? '#fca5a5' : undefined }}>{toast}</div>
             )}
         </>
     );

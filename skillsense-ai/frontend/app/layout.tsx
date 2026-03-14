@@ -6,6 +6,11 @@ export const metadata: Metadata = {
     title: "SkillSense AI — Measuring Skills, Predicting Futures",
     description:
         "AI-powered skill gap analysis, verifiable Skill Passports, career matching, and national workforce intelligence for India's IT and software engineering ecosystem.",
+    icons: {
+        icon: [{ url: '/icon.png', type: 'image/png' }],
+        shortcut: '/icon.png',
+        apple: '/icon.png',
+    },
 };
 
 export default function RootLayout({

@@ -45,12 +45,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const { data } = await api.post('/auth/login', { email, password });
-      const { user, accessToken, refreshToken } = data.data;
-      setTokens(accessToken, refreshToken);
-      set({ user, accessToken, loading: false });
-    } catch (err: any) {
+      // Backend returns { success, data: { user, token }, message }
+      const { user, token, accessToken, refreshToken } = data.data;
+      const jwt = token ?? accessToken; // support both field names
+      setTokens(jwt, refreshToken);
+      // Mirror to localStorage for the sidebar display
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('ss_user', JSON.stringify({ name: user.name, role: user.role, email: user.email }));
+      }
+      set({ user, accessToken: jwt, loading: false });
+    } catch (err: unknown) {
       const message =
-        err.response?.data?.message ?? 'Login failed. Please check your credentials.';
+        (err as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'Login failed. Please check your credentials.';
       set({ loading: false, error: message });
       throw err;
     }
@@ -61,12 +67,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const { data } = await api.post('/auth/register', { name, email, password, role });
-      const { user, accessToken, refreshToken } = data.data;
-      setTokens(accessToken, refreshToken);
-      set({ user, accessToken, loading: false });
-    } catch (err: any) {
+      const { user, token, accessToken, refreshToken } = data.data;
+      const jwt = token ?? accessToken;
+      setTokens(jwt, refreshToken);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('ss_user', JSON.stringify({ name: user.name, role: user.role, email: user.email }));
+      }
+      set({ user, accessToken: jwt, loading: false });
+    } catch (err: unknown) {
       const message =
-        err.response?.data?.message ?? 'Registration failed. Please try again.';
+        (err as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'Registration failed. Please try again.';
       set({ loading: false, error: message });
       throw err;
     }
