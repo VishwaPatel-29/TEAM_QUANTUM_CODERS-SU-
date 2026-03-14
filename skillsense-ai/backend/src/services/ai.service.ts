@@ -1,62 +1,149 @@
+// backend/src/services/ai.service.ts
+
 import OpenAI from 'openai';
+import logger from '../utils/logger';
+
+// ── Clients ───────────────────────────────────────────────────────────────────
 
 const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
+const perplexity = new OpenAI({
+  apiKey: process.env.PERPLEXITY_API_KEY,
+  baseURL: 'https://api.perplexity.ai',
+});
+
+// ── Interfaces ────────────────────────────────────────────────────────────────
+
+export interface SkillScore {
+  skillName: string;
+  score: number;
+  confidence: number;
+}
+
+export interface CareerPrediction {
+  likelyRoles: string[];
+  matchScores: number[];
+  predictedSalaryRange: string;
+  timeToPlacement: string;
+}
+
 export interface SkillGapAnalysisInput {
-    studentId: string;
-    studentName: string;
-    program: string;
-    skills: { skill: string; score: number }[];
-    targetRole?: string;
-    nsqfLevel: number;
+  studentId: string;
+  studentName: string;
+  program: string;
+  skills: { skill: string; score: number }[];
+  targetRole?: string;
+  nsqfLevel: number;
 }
 
 export interface SkillGapAnalysisResult {
-    studentId: string;
-    overallGapScore: number;
-    criticalGaps: { skill: string; currentScore: number; requiredScore: number; gap: number }[];
-    recommendations: string[];
-    estimatedTimeToClose: string;
-    nextSteps: string[];
-    aiSummary: string;
+  studentId: string;
+  overallGapScore: number;
+  criticalGaps: {
+    skill: string;
+    currentScore: number;
+    requiredScore: number;
+    gap: number;
+  }[];
+  recommendations: string[];
+  estimatedTimeToClose: string;
+  nextSteps: string[];
+  aiSummary: string;
 }
 
 export interface CareerMatchInput {
-    skills: { skill: string; score: number }[];
-    program: string;
-    nsqfLevel: number;
-    overallScore: number;
-    state: string;
-    gender: 'male' | 'female';
+  skills: { skill: string; score: number }[];
+  program: string;
+  nsqfLevel: number;
+  overallScore: number;
+  state: string;
+  gender: 'male' | 'female';
 }
 
 export interface CareerMatchResult {
-    topCareerPaths: {
-        title: string;
-        matchPercent: number;
-        requiredUpskilling: string[];
-        estimatedSalary: { min: number; max: number };
-        timeToAchieve: string;
-    }[];
-    aiExplanation: string;
+  topCareerPaths: {
+    title: string;
+    matchPercent: number;
+    requiredUpskilling: string[];
+    estimatedSalary: { min: number; max: number };
+    timeToAchieve: string;
+  }[];
+  aiExplanation: string;
 }
 
 export interface InterventionRecommendation {
-    type: 'skill-gap' | 'dropout-risk' | 'placement-alert' | 'remediation';
-    urgency: 'high' | 'medium' | 'low';
-    action: string;
-    expectedOutcome: string;
+  type: 'skill-gap' | 'dropout-risk' | 'placement-alert' | 'remediation';
+  urgency: 'high' | 'medium' | 'low';
+  action: string;
+  expectedOutcome: string;
 }
 
+export interface IndustryDemandResult {
+  demandSummary: string;
+  trendDirection: 'rising' | 'stable' | 'declining';
+  topEmployers: string[];
+  avgSalaryRange: string;
+}
+
+// ── AIService Class ───────────────────────────────────────────────────────────
+
 export class AIService {
-    /**
-     * Analyse skill gaps for a student and produce structured recommendations.
-     */
-    async analyzeSkillGaps(input: SkillGapAnalysisInput): Promise<SkillGapAnalysisResult> {
-        const prompt = `
-You are an AI skill gap analyst for India's vocational education system (NSQF framework).
+
+  // ── 1. Extract Skills from Assessment ──────────────────────────────────────
+  async extractSkills(
+    responses: { questionId: string; answer: string; timeTaken: number }[]
+  ): Promise<SkillScore[]> {
+    if (!responses || responses.length === 0) return [];
+
+    try {
+      const prompt = `You are an expert vocational skills assessor for India's NSQF framework.
+Analyse the following assessment responses and extract skill scores.
+
+Responses:
+${JSON.stringify(responses, null, 2)}
+
+Return a JSON object with a "skills" array. Each item must have:
+- skillName: string
+- score: number (0-100)
+- confidence: number (0-1)
+
+Return ONLY valid JSON.`;
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+        max_tokens: 500,
+      });
+
+      const content = completion.choices[0]?.message?.content ?? '{"skills":[]}';
+      const parsed = JSON.parse(content);
+      return Array.isArray(parsed.skills) ? parsed.skills : [];
+    } catch (err) {
+      logger.error('AI extractSkills error:', err);
+      return [];
+    }
+  }
+
+  // ── 2. Analyse Skill Gaps ──────────────────────────────────────────────────
+  async analyzeSkillGaps(
+    input: SkillGapAnalysisInput
+  ): Promise<SkillGapAnalysisResult> {
+    const fallback: SkillGapAnalysisResult = {
+      studentId: input.studentId,
+      overallGapScore: 50,
+      criticalGaps: [],
+      recommendations: ['Enroll in PMKVY scheme for targeted skill training'],
+      estimatedTimeToClose: '3-6 months',
+      nextSteps: ['Take a diagnostic assessment', 'Consult your institute counsellor'],
+      aiSummary: 'Skill gap analysis unavailable. Please try again later.',
+    };
+
+    try {
+      const prompt = `You are an AI skill gap analyst for India's vocational education system (NSQF framework).
 
 Student Profile:
 - Name: ${input.studentName}
@@ -65,139 +152,213 @@ Student Profile:
 - Target Role: ${input.targetRole ?? 'Not specified'}
 - Current Skills: ${JSON.stringify(input.skills)}
 
-Task: Analyse skill gaps, identify critical deficiencies, and recommend targeted upskilling actions relevant to the Indian vocational market.
+Analyse skill gaps, identify critical deficiencies, and recommend targeted upskilling actions relevant to the Indian vocational market.
 
-Respond ONLY with a JSON object matching this schema:
+Respond ONLY with JSON:
 {
-  "overallGapScore": <number 0-100, higher = bigger gap>,
-  "criticalGaps": [
-    { "skill": "<name>", "currentScore": <num>, "requiredScore": <num>, "gap": <num> }
-  ],
-  "recommendations": ["<actionable recommendation>"],
-  "estimatedTimeToClose": "<e.g. 3 months>",
-  "nextSteps": ["<immediate next step>"],
-  "aiSummary": "<2-3 sentence plain English summary>"
-}
-`.trim();
+  "overallGapScore": <0-100>,
+  "criticalGaps": [{ "skill": "", "currentScore": 0, "requiredScore": 0, "gap": 0 }],
+  "recommendations": [""],
+  "estimatedTimeToClose": "",
+  "nextSteps": [""],
+  "aiSummary": ""
+}`.trim();
 
-        const completion = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [{ role: 'user', content: prompt }],
-            response_format: { type: 'json_object' },
-            temperature: 0.3,
-            max_tokens: 600,
-        });
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.3,
+        max_tokens: 600,
+      });
 
-        const parsed = JSON.parse(completion.choices[0].message.content ?? '{}');
-        return { studentId: input.studentId, ...parsed };
+      const parsed = JSON.parse(completion.choices[0].message.content ?? '{}');
+      return { studentId: input.studentId, ...parsed };
+    } catch (err) {
+      logger.error('AI analyzeSkillGaps error:', err);
+      return fallback;
     }
+  }
 
-    /**
-     * Match a student profile to viable career pathways using AI.
-     */
-    async matchCareerPaths(input: CareerMatchInput): Promise<CareerMatchResult> {
-        const prompt = `
-You are an AI career counselor for India's vocational education ecosystem.
+  // ── 3. Career Path Matching ────────────────────────────────────────────────
+  async matchCareerPaths(input: CareerMatchInput): Promise<CareerMatchResult> {
+    const fallback: CareerMatchResult = {
+      topCareerPaths: [
+        {
+          title: 'Entry-level Technician',
+          matchPercent: 65,
+          requiredUpskilling: ['Practical lab skills', 'Safety standards'],
+          estimatedSalary: { min: 15000, max: 25000 },
+          timeToAchieve: '3-6 months',
+        },
+      ],
+      aiExplanation: 'Career path analysis unavailable. Showing default recommendations.',
+    };
+
+    try {
+      const prompt = `You are an AI career counselor for India's vocational education ecosystem.
 
 Student Profile:
 - Program: ${input.program}
 - NSQF Level: ${input.nsqfLevel}
 - Overall Score: ${input.overallScore}/100
 - State: ${input.state}
+- Gender: ${input.gender}
 - Skills: ${JSON.stringify(input.skills)}
 
-Task: Identify the top 3 realistic career pathways for this student within the Indian job market (consider sectors like manufacturing, IT, healthcare, renewable energy, automobile). For each pathway specify match %, required upskilling, salary range in INR, and estimated time to achieve.
+Identify top 3 realistic career pathways within the Indian job market (manufacturing, IT, healthcare, renewable energy, automobile).
 
-Respond ONLY with JSON matching this schema:
+Respond ONLY with JSON:
 {
   "topCareerPaths": [
     {
-      "title": "<career path title>",
-      "matchPercent": <number>,
-      "requiredUpskilling": ["<skill>"],
-      "estimatedSalary": { "min": <monthly INR>, "max": <monthly INR> },
-      "timeToAchieve": "<e.g. 6 months>"
+      "title": "",
+      "matchPercent": 0,
+      "requiredUpskilling": [""],
+      "estimatedSalary": { "min": 0, "max": 0 },
+      "timeToAchieve": ""
     }
   ],
-  "aiExplanation": "<3 sentence explanation of the logic>"
-}
-`.trim();
+  "aiExplanation": ""
+}`.trim();
 
-        const completion = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [{ role: 'user', content: prompt }],
-            response_format: { type: 'json_object' },
-            temperature: 0.4,
-            max_tokens: 700,
-        });
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.4,
+        max_tokens: 700,
+      });
 
-        return JSON.parse(completion.choices[0].message.content ?? '{}') as CareerMatchResult;
+      return JSON.parse(
+        completion.choices[0].message.content ?? '{}'
+      ) as CareerMatchResult;
+    } catch (err) {
+      logger.error('AI matchCareerPaths error:', err);
+      return fallback;
     }
+  }
 
-    /**
-     * Generate intervention recommendations for a cohort of at-risk students.
-     */
-    async generateInterventions(
-        atRiskStudents: {
-            name: string;
-            overallScore: number;
-            attendance?: number;
-            missingSkills: string[];
-        }[]
-    ): Promise<InterventionRecommendation[]> {
-        const prompt = `
-You are an AI education intervention planner for vocational students in India.
+  // ── 4. Generate Interventions ──────────────────────────────────────────────
+  async generateInterventions(
+    atRiskStudents: {
+      name: string;
+      overallScore: number;
+      attendance?: number;
+      missingSkills: string[];
+    }[]
+  ): Promise<InterventionRecommendation[]> {
+    if (!atRiskStudents || atRiskStudents.length === 0) return [];
 
-At-risk students data: ${JSON.stringify(atRiskStudents)}
+    try {
+      const prompt = `You are an AI education intervention planner for vocational students in India.
 
-For each student, generate targeted intervention recommendations. Consider attendance, skill scores, and program context.
+At-risk students: ${JSON.stringify(atRiskStudents)}
 
-Respond ONLY with a JSON array:
+Generate targeted intervention recommendations for each student.
+
+Respond ONLY with JSON array:
 [
   {
-    "studentName": "<name>",
     "type": "skill-gap" | "dropout-risk" | "placement-alert" | "remediation",
     "urgency": "high" | "medium" | "low",
-    "action": "<specific action to take>",
-    "expectedOutcome": "<measurable outcome>"
+    "action": "",
+    "expectedOutcome": ""
   }
-]
-`.trim();
+]`.trim();
 
-        const completion = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [{ role: 'user', content: prompt }],
-            response_format: { type: 'json_object' },
-            temperature: 0.3,
-            max_tokens: 800,
-        });
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.3,
+        max_tokens: 800,
+      });
 
-        const data = JSON.parse(completion.choices[0].message.content ?? '{"interventions":[]}');
-        return Array.isArray(data) ? data : data.interventions ?? [];
+      const data = JSON.parse(
+        completion.choices[0].message.content ?? '{"interventions":[]}'
+      );
+      return Array.isArray(data) ? data : data.interventions ?? [];
+    } catch (err) {
+      logger.error('AI generateInterventions error:', err);
+      return [];
     }
+  }
 
-    /**
-     * Generate a plain-language insight summary for a dashboard section.
-     */
-    async generateInsightSummary(context: string, dataSnippet: object): Promise<string> {
-        const prompt = `
-You are an AI analyst for the SkillSense AI vocational intelligence platform.
+  // ── 5. Research Industry Demand (Perplexity) ───────────────────────────────
+  async researchIndustryDemand(
+    domain: string
+  ): Promise<IndustryDemandResult> {
+    const fallback: IndustryDemandResult = {
+      demandSummary: `${domain} skills are in steady demand across Indian industries.`,
+      trendDirection: 'stable',
+      topEmployers: ['TCS', 'Infosys', 'Wipro', 'HCL', 'L&T'],
+      avgSalaryRange: '₹2L - ₹5L per annum',
+    };
+
+    try {
+      const response = await perplexity.chat.completions.create({
+        model: 'llama-3.1-sonar-small-128k-online',
+        messages: [
+          {
+            role: 'user',
+            content: `Research current job market demand for "${domain}" skills in India in 2025.
+Return ONLY JSON:
+{
+  "demandSummary": "",
+  "trendDirection": "rising" | "stable" | "declining",
+  "topEmployers": [""],
+  "avgSalaryRange": ""
+}`,
+          },
+        ],
+        temperature: 0.1,
+      });
+
+      const content = response.choices[0]?.message?.content ?? '{}';
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return fallback;
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        demandSummary:    parsed.demandSummary    ?? fallback.demandSummary,
+        trendDirection:   parsed.trendDirection   ?? fallback.trendDirection,
+        topEmployers:     parsed.topEmployers     ?? fallback.topEmployers,
+        avgSalaryRange:   parsed.avgSalaryRange   ?? fallback.avgSalaryRange,
+      };
+    } catch (err) {
+      logger.error('Perplexity researchIndustryDemand error:', err);
+      return fallback;
+    }
+  }
+
+  // ── 6. Generate Dashboard Insight Summary ─────────────────────────────────
+  async generateInsightSummary(
+    context: string,
+    dataSnippet: object
+  ): Promise<string> {
+    try {
+      const prompt = `You are an AI analyst for the SkillSense AI vocational intelligence platform.
 
 Context: ${context}
 Data: ${JSON.stringify(dataSnippet)}
 
-Write a concise 2-3 sentence insight in plain English suitable for a government/industry dashboard. Focus on actionable takeaways specific to India's skill development sector.
-`.trim();
+Write a concise 2-3 sentence insight in plain English suitable for a government/industry dashboard. Focus on actionable takeaways specific to India's skill development sector.`.trim();
 
-        const completion = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [{ role: 'user', content: prompt }],
-            temperature: 0.5,
-            max_tokens: 200,
-        });
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.5,
+        max_tokens: 200,
+      });
 
-        return completion.choices[0].message.content?.trim() ?? '';
+      return completion.choices[0].message.content?.trim() ?? '';
+    } catch (err) {
+      logger.error('AI generateInsightSummary error:', err);
+      return '';
     }
+  }
 }
 
+// ── Singleton export ──────────────────────────────────────────────────────────
 export const aiService = new AIService();
