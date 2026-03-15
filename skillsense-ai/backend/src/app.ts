@@ -28,15 +28,22 @@ app.use(helmet());
 
 const allowedOrigins = [
   'http://localhost:3000',
-  'http://localhost:3001', 
+  'http://localhost:3001',
   'https://skillsense-ai-seven.vercel.app',
-  process.env.FRONTEND_URL,
+  ...(process.env.CORS_ORIGIN?.split(',') || []),
 ].filter(Boolean) as string[];
 
 app.use(cors({
   origin: (origin, callback) => {
+    // 1. Allow if no origin (server-to-server, Postman)
     if (!origin) return callback(null, true);
+    
+    // 2. Allow if in explicit list
     if (allowedOrigins.includes(origin)) return callback(null, true);
+    
+    // 3. Allow all Vercel preview deployments
+    if (origin.endsWith('.vercel.app')) return callback(null, true);
+    
     return callback(new Error(`CORS blocked: ${origin}`));
   },
   credentials: true,
