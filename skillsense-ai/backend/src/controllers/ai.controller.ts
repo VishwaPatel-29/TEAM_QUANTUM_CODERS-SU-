@@ -71,33 +71,29 @@ Context about this user: ${context || 'Student on SkillSense AI platform'}`;
       { role: 'user', content: message },
     ];
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages,
+    const reply = await aiService.chatWithFallback(messages, {
       max_tokens: 300,
       temperature: 0.7,
     });
 
-    const reply = completion.choices[0]?.message?.content?.trim() ?? 'I could not generate a response. Please try again.';
-
     // Generate 3 contextual follow-up suggestions
-    const suggestCompletion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: 'You are a helpful assistant. Given the AI reply, generate exactly 3 short follow-up question suggestions a student might ask next. Return a JSON array of 3 strings, each under 8 words. Example: ["How do I learn JavaScript?","What salary can I expect?","Which companies hire freshers?"]' },
-        { role: 'user', content: `AI just said: "${reply.substring(0, 200)}". Suggest 3 follow-up questions.` },
-      ],
-      max_tokens: 120,
-      temperature: 0.8,
-      response_format: { type: 'json_object' },
-    });
-
     let suggestions: string[] = ['Tell me more', 'How do I get started?', 'What skills should I learn?'];
     try {
-      const parsed = JSON.parse(suggestCompletion.choices[0]?.message?.content ?? '{}');
+      const suggestContent = await aiService.chatWithFallback([
+        { role: 'system', content: 'You are a helpful assistant. Given the AI reply, generate exactly 3 short follow-up question suggestions a student might ask next. Return a JSON array of 3 strings, each under 8 words. Example: ["How do I learn JavaScript?","What salary can I expect?","Which companies hire freshers?"]' },
+        { role: 'user', content: `AI just said: "${reply.substring(0, 200)}". Suggest 3 follow-up questions.` },
+      ], {
+        max_tokens: 120,
+        temperature: 0.8,
+        response_format: { type: 'json_object' },
+      });
+
+      const parsed = JSON.parse(suggestContent || '{}');
       if (Array.isArray(parsed.suggestions)) suggestions = parsed.suggestions.slice(0, 3);
       else if (Array.isArray(parsed)) suggestions = parsed.slice(0, 3);
-    } catch { /* use defaults */ }
+    } catch (err) {
+      logger.error('Suggestions generation failed (non-blocking):', err);
+    }
 
     res.status(200).json({ success: true, data: { reply, suggestions }, message: 'OK' });
 
@@ -158,15 +154,13 @@ Return ONLY valid JSON:
 Make questions practical and relevant to Indian software/IT industry. Mix easy and hard.`;
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
+    const result = await aiService.chatWithFallback([{ role: 'user', content: prompt }], {
       response_format: { type: 'json_object' },
       temperature: 0.5,
       max_tokens: 1000,
     });
 
-    const parsed = JSON.parse(completion.choices[0].message.content ?? '{"questions":[]}');
+    const parsed = JSON.parse(result || '{"questions":[]}');
     res.status(200).json({ success: true, data: { topic, level, questions: parsed.questions ?? [] }, message: 'OK' });
   } catch (err) {
     logger.error('assessSkill error:', err);
@@ -203,15 +197,13 @@ Return ONLY valid JSON:
 }`;
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
+    const result = await aiService.chatWithFallback([{ role: 'user', content: prompt }], {
       response_format: { type: 'json_object' },
       temperature: 0.4,
       max_tokens: 500,
     });
 
-    const feedback = JSON.parse(completion.choices[0].message.content ?? '{}');
+    const feedback = JSON.parse(result || '{}');
     res.status(200).json({
       success: true,
       data: {
@@ -264,15 +256,13 @@ Return ONLY valid JSON:
 }`;
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
+    const result = await aiService.chatWithFallback([{ role: 'user', content: prompt }], {
       response_format: { type: 'json_object' },
       temperature: 0.5,
       max_tokens: 800,
     });
 
-    const parsed = JSON.parse(completion.choices[0].message.content ?? '{"careers":[]}');
+    const parsed = JSON.parse(result || '{"careers":[]}');
     
     // Save to database in background
     if (userId !== 'anon') {

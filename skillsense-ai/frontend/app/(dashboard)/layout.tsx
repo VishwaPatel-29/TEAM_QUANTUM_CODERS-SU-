@@ -3,19 +3,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { 
-    LogOut, 
-    User as UserIcon, 
-    Settings, 
-    ChevronDown,
-    LayoutDashboard,
-    FileText,
-    Brain,
-    GraduationCap,
-    TrendingUp,
-    Briefcase
-} from 'lucide-react';
-import { useAuthStore } from '@/store/authStore';
 
 const GOLD = '#D4A843';
 const AMBER = '#F59E0B';
@@ -23,12 +10,64 @@ const AMBER = '#F59E0B';
 const NAV = [
     {
         group: 'Student', accent: GOLD, routes: [
-            { label: 'Overview', href: '/student', icon: <LayoutDashboard size={14} /> },
-            { label: 'Skill Passport', href: '/student/passport', icon: <FileText size={14} /> },
-            { label: 'AI Analyzer', href: '/student/analyzer', icon: <Brain size={14} /> },
-            { label: 'Assessments', href: '/student/assessments', icon: <GraduationCap size={14} /> },
-            { label: 'Career Path', href: '/student/career', icon: <TrendingUp size={14} /> },
-            { label: 'Find Jobs', href: '/student/jobs', icon: <Briefcase size={14} /> },
+            { label: 'Overview', href: '/student' },
+            { label: 'Skill Passport', href: '/student/passport' },
+            { label: 'AI Analyzer', href: '/student/analyzer' },
+            { label: 'My Submissions', href: '/student/submissions' },
+            { label: 'Assessments', href: '/student/assessments' },
+            { label: 'Tests', href: '/student/tests' },
+            { label: 'Leaderboard', href: '/student/leaderboard', badge: '🔥' },
+            { label: 'Find Jobs', href: '/student/jobs', badge: 'NEW' },
+            { label: 'Career Path', href: '/student/career' },
+            { label: 'Profile', href: '/student/profile' },
+            { label: 'Latest News', href: '/student/news' },
+        ],
+    },
+    {
+        group: 'Institute', accent: '#a78bfa', routes: [
+            { label: 'Overview', href: '/institute' },
+            { label: 'Students', href: '/institute/students' },
+            { label: 'Evaluations', href: '/institute/evaluations' },
+            { label: 'Placements', href: '/institute/placement' },
+            { label: 'Program ROI', href: '/institute/roi' },
+            { label: 'Upload Data', href: '/institute/upload' },
+            { label: 'Latest News', href: '/institute/news' },
+        ],
+    },
+    {
+        group: 'Employer', accent: '#06b6d4', routes: [
+            { label: 'Overview', href: '/employer' },
+            { label: 'Feedback', href: '/employer/feedback' },
+            { label: 'Skill Validation', href: '/employer/validations' },
+            { label: 'Placements', href: '/employer/placements' },
+        ],
+    },
+    {
+        group: 'Industry', accent: '#34d399', routes: [
+            { label: 'Overview', href: '/industry' },
+            { label: 'Talent Pool', href: '/industry/talent' },
+            { label: 'Demand Signals', href: '/industry/demand' },
+            { label: 'Campus Connect', href: '/industry/campus' },
+            { label: 'Latest News', href: '/industry/news' },
+        ],
+    },
+    {
+        group: 'Government', accent: AMBER, routes: [
+            { label: 'Overview', href: '/government' },
+            { label: 'Region Heatmap', href: '/government/heatmap' },
+            { label: 'Fund Targeting', href: '/government/fund-targeting' },
+            { label: 'Compliance', href: '/government/compliance' },
+            { label: 'Latest News', href: '/government/news' },
+        ],
+    },
+    {
+        group: 'Admin', accent: '#f87171', routes: [
+            { label: 'Overview', href: '/admin' },
+            { label: 'Users', href: '/admin/users' },
+            { label: 'Institutes', href: '/admin/institutes' },
+            { label: 'Fairness', href: '/admin/fairness' },
+            { label: 'Audit Logs', href: '/admin/audit-logs' },
+            { label: 'Reports', href: '/admin/reports' },
         ],
     },
 ];
@@ -36,6 +75,7 @@ const NAV = [
 const ROLE_GROUP_MAP: Record<string, string> = {
     student: 'Student',
     institute: 'Institute',
+    employer: 'Employer',
     industry: 'Industry',
     government: 'Government',
     admin: 'Admin',
@@ -44,43 +84,64 @@ const ROLE_GROUP_MAP: Record<string, string> = {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const router = useRouter();
-    const { logout } = useAuthStore();
     const [collapsed, setCollapsed] = useState(false);
-    const [user, setUser] = useState<{ name: string; role: string; email: string; avatar?: string } | null>(null);
+    const [userName, setUserName] = useState('');
+    const [userRole, setUserRole] = useState('');
     const [showDropdown, setShowDropdown] = useState(false);
+    const [userAvatar, setUserAvatar] = useState('');
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         try {
             const stored = localStorage.getItem('ss_user');
             if (stored) {
-                setUser(JSON.parse(stored));
+                const parsed = JSON.parse(stored);
+                setUserName(parsed.name || 'User');
+                setUserRole(parsed.role || '');
+                setUserAvatar(parsed.avatar || '');
             }
         } catch { }
+
+        // Listen for avatar updates from profile page
+        const handleAvatarUpdate = () => {
+            try {
+                const stored = localStorage.getItem('ss_user');
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    setUserAvatar(parsed.avatar || '');
+                    setUserName(parsed.name || 'User');
+                }
+            } catch { }
+        };
+        window.addEventListener('avatar-updated', handleAvatarUpdate);
+        window.addEventListener('storage', handleAvatarUpdate);
+        // Also poll periodically for cross-component updates
+        const interval = setInterval(handleAvatarUpdate, 2000);
+        return () => {
+            window.removeEventListener('avatar-updated', handleAvatarUpdate);
+            window.removeEventListener('storage', handleAvatarUpdate);
+            clearInterval(interval);
+        };
     }, []);
 
+    // Close dropdown on outside click
     useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        const handleClick = (e: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
                 setShowDropdown(false);
             }
         };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
     }, []);
 
-    const handleLogout = async () => {
-        // Clear cookie
+    const handleLogout = () => {
         document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-        document.cookie = 'skillsense_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-        // Clear localStorage
         localStorage.clear();
-        // Zustand logout handles API call and redirect
-        await logout();
         router.push('/auth');
     };
 
-    const userRole = user?.role || '';
+    // Filter NAV based on role
     const filteredNav = userRole
         ? NAV.filter(n => n.group === ROLE_GROUP_MAP[userRole])
         : NAV;
@@ -97,8 +158,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const parts = pathname.split('/').filter(Boolean);
     const crumb = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' / ');
 
-    const initials = user?.name
-        ? user.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+    const initials = userName
+        ? userName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
         : 'U';
 
     return (
@@ -172,6 +233,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
                                 {!collapsed && isOpen && routes.map(route => {
                                     const active = pathname === route.href;
+                                    const badge = (route as { badge?: string }).badge;
                                     return (
                                         <Link key={route.href} href={route.href} style={{
                                             display: 'flex', alignItems: 'center',
@@ -181,8 +243,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                             color: active ? accent : '#64748b',
                                             fontSize: 12, fontWeight: active ? 700 : 500,
                                             transition: 'all 0.15s', whiteSpace: 'nowrap',
+                                            gap: 6,
                                         }}>
                                             {route.label}
+                                            {badge && (
+                                                <span style={{
+                                                    fontSize: 8, fontWeight: 800, padding: '1px 5px', borderRadius: 99,
+                                                    background: 'rgba(34,197,94,0.15)', color: '#22c55e',
+                                                    letterSpacing: '0.05em',
+                                                }}>{badge}</span>
+                                            )}
                                         </Link>
                                     );
                                 })}
@@ -191,51 +261,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     })}
                 </nav>
 
-                {/* Profile & Logout Section */}
-                <div style={{ borderTop: '1px solid rgba(212,168,67,0.08)', padding: '12px 0' }}>
-                    <Link 
-                        href={`/${userRole}/profile`}
-                        style={{
-                            display: 'flex', alignItems: 'center', gap: 10,
-                            padding: collapsed ? '10px 0' : '10px 16px',
-                            textDecoration: 'none', color: '#fff',
-                            justifyContent: collapsed ? 'center' : undefined,
-                            transition: 'background 0.2s',
-                        }}
-                        className="hover:bg-white/5"
-                    >
-                        <div style={{
-                            width: 28, height: 28, borderRadius: '50%',
-                            background: 'linear-gradient(135deg, #D4A843, #F0C05A)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 10, fontWeight: 800, color: '#08060f', flexShrink: 0,
-                        }}>
-                             {user?.avatar ? (
-                                <img src={user.avatar} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-                             ) : initials}
-                        </div>
-                        {!collapsed && (
-                            <div style={{ minWidth: 0 }}>
-                                <p style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.name || 'User'}</p>
-                                <p style={{ fontSize: 10, color: '#475569', textTransform: 'capitalize' }}>{userRole}</p>
-                            </div>
-                        )}
-                    </Link>
+                {/* Sidebar bottom: Logout */}
+                {!collapsed && (
                     <button
                         onClick={handleLogout}
                         style={{
-                            width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                            padding: collapsed ? '10px 0' : '10px 16px',
-                            border: 'none', background: 'transparent', cursor: 'pointer',
-                            color: '#64748b', transition: 'color 0.2s',
-                            justifyContent: collapsed ? 'center' : undefined,
+                            padding: '10px 16px', background: 'transparent', border: 'none',
+                            borderTop: '1px solid rgba(212,168,67,0.08)', cursor: 'pointer',
+                            color: '#ef4444', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8,
+                            fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600,
+                            transition: 'background 0.15s',
                         }}
-                        className="hover:text-red-400"
+                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.06)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                     >
-                        <LogOut size={16} />
-                        {!collapsed && <span style={{ fontSize: 13, fontWeight: 500 }}>Logout</span>}
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                            <polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
+                        </svg>
+                        Logout
                     </button>
-                </div>
+                )}
 
                 {/* Collapse toggle */}
                 <button
@@ -249,7 +295,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     }}
                 >
                     <span>{collapsed ? '»' : '«'}</span>
-                    {!collapsed && <span className="font-display" style={{ fontWeight: 600, fontSize: 11 }}>Collapse Sidebar</span>}
+                    {!collapsed && <span className="font-display" style={{ fontWeight: 600, fontSize: 11 }}>Collapse</span>}
                 </button>
             </aside>
 
@@ -267,82 +313,75 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         {crumb || 'Dashboard'}
                     </p>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                        {userName && <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>{userName}</span>}
                         <span style={{ fontSize: 12, color: '#475569' }}>
                             {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                         </span>
-                        
-                        <div style={{ position: 'relative' }} ref={dropdownRef}>
-                            <button 
-                                onClick={() => setShowDropdown(!showDropdown)}
-                                style={{ 
-                                    display: 'flex', alignItems: 'center', gap: 8, 
-                                    background: 'transparent', border: 'none', cursor: 'pointer',
-                                    padding: '4px 8px', borderRadius: 8, transition: 'background 0.2s'
-                                }}
-                                className="hover:bg-white/5"
-                            >
-                                <div style={{
+
+                        {/* Avatar with dropdown */}
+                        <div ref={dropdownRef} style={{ position: 'relative' }}>
+                            <div
+                                onClick={() => setShowDropdown(p => !p)}
+                                style={{
                                     width: 30, height: 30, borderRadius: '50%',
-                                    background: 'linear-gradient(135deg, #D4A843, #F0C05A)',
+                                    background: userAvatar ? 'transparent' : 'linear-gradient(135deg, #D4A843, #F0C05A)',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontSize: 11, fontWeight: 800, color: '#08060f',
-                                }}>
-                                    {user?.avatar ? (
-                                        <img src={user.avatar} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-                                    ) : initials}
-                                </div>
-                                <ChevronDown size={14} className={`text-slate-500 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
-                            </button>
+                                    fontSize: 11, fontWeight: 800, color: '#08060f', cursor: 'pointer',
+                                    transition: 'box-shadow 0.2s',
+                                    boxShadow: showDropdown ? '0 0 0 2px #D4A843' : 'none',
+                                    overflow: 'hidden',
+                                    border: userAvatar ? '2px solid #D4A843' : 'none',
+                                }}
+                            >
+                                {userAvatar ? (
+                                    <img src={userAvatar} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                    initials
+                                )}
+                            </div>
 
                             {showDropdown && (
                                 <div style={{
                                     position: 'absolute', top: '100%', right: 0, marginTop: 8,
-                                    width: 200, background: '#161225', border: '1px solid rgba(212,168,67,0.15)',
-                                    borderRadius: 12, overflow: 'hidden', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.4)',
-                                    zIndex: 100
+                                    background: '#111', border: '1px solid rgba(212,168,67,0.12)',
+                                    borderRadius: 12, padding: '6px', minWidth: 180,
+                                    boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                                    animation: 'fadeIn 0.15s ease',
                                 }}>
-                                    <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                        <p style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>{user?.name}</p>
-                                        <p style={{ fontSize: 11, color: '#64748b' }}>{user?.email}</p>
+                                    <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(212,168,67,0.08)', marginBottom: 4 }}>
+                                        <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{userName}</div>
+                                        <div style={{ fontSize: 11, color: '#475569', textTransform: 'capitalize' }}>{userRole || 'Student'}</div>
                                     </div>
-                                    <div style={{ padding: '6px' }}>
-                                        <Link 
-                                            href={`/${userRole}/profile`}
-                                            onClick={() => setShowDropdown(false)}
-                                            style={{ 
-                                                display: 'flex', alignItems: 'center', gap: 10, 
-                                                padding: '8px 10px', borderRadius: 8, textDecoration: 'none', 
-                                                color: '#cbd5e1', fontSize: 13, transition: 'all 0.2s'
-                                            }}
-                                            className="hover:bg-white/5 hover:text-white"
-                                        >
-                                            <UserIcon size={16} /> View Profile
-                                        </Link>
-                                        <Link 
-                                            href={`/${userRole}/settings`}
-                                            onClick={() => setShowDropdown(false)}
-                                            style={{ 
-                                                display: 'flex', alignItems: 'center', gap: 10, 
-                                                padding: '8px 10px', borderRadius: 8, textDecoration: 'none', 
-                                                color: '#cbd5e1', fontSize: 13, transition: 'all 0.2s'
-                                            }}
-                                            className="hover:bg-white/5 hover:text-white"
-                                        >
-                                            <Settings size={16} /> Settings
-                                        </Link>
-                                        <button 
-                                            onClick={handleLogout}
-                                            style={{ 
-                                                width: '100%', display: 'flex', alignItems: 'center', gap: 10, 
-                                                padding: '8px 10px', borderRadius: 8, background: 'transparent',
-                                                border: 'none', cursor: 'pointer', color: '#f87171', 
-                                                fontSize: 13, transition: 'all 0.2s'
-                                            }}
-                                            className="hover:bg-red-500/10"
-                                        >
-                                            <LogOut size={16} /> Logout
-                                        </button>
-                                    </div>
+                                    <Link href="/student/profile" onClick={() => setShowDropdown(false)} style={{
+                                        display: 'flex', alignItems: 'center', gap: 8,
+                                        padding: '8px 12px', textDecoration: 'none',
+                                        color: '#94a3b8', fontSize: 13, borderRadius: 8,
+                                        transition: 'background 0.15s',
+                                    }}
+                                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(212,168,67,0.06)')}
+                                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                    >
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
+                                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
+                                        </svg>
+                                        View Profile
+                                    </Link>
+                                    <button onClick={() => { setShowDropdown(false); handleLogout(); }} style={{
+                                        width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                                        padding: '8px 12px', background: 'transparent', border: 'none',
+                                        color: '#ef4444', fontSize: 13, cursor: 'pointer', borderRadius: 8,
+                                        fontFamily: "'Space Grotesk', sans-serif",
+                                        transition: 'background 0.15s',
+                                    }}
+                                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.06)')}
+                                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                    >
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2">
+                                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                                            <polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
+                                        </svg>
+                                        Logout
+                                    </button>
                                 </div>
                             )}
                         </div>
@@ -354,53 +393,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     {children}
                 </main>
             </div>
+
+            <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }`}</style>
         </div>
     );
 }
-
-const NAV_STUDENT = [
-    { label: 'Overview', href: '/student', icon: <LayoutDashboard size={14} /> },
-    { label: 'Skill Passport', href: '/student/passport' },
-    { label: 'AI Analyzer', href: '/student/analyzer' },
-    { label: 'Assessments', href: '/student/assessments' },
-    { label: 'Career Path', href: '/student/career' },
-];
-
-const NAV_INSTITUTE = [
-    { label: 'Overview', href: '/institute' },
-    { label: 'Students', href: '/institute/students' },
-    { label: 'Placements', href: '/institute/placement' },
-    { label: 'Program ROI', href: '/institute/roi' },
-    { label: 'Upload Data', href: '/institute/upload' },
-];
-
-const NAV_INDUSTRY = [
-    { label: 'Overview', href: '/industry' },
-    { label: 'Talent Pool', href: '/industry/talent' },
-    { label: 'Demand Signals', href: '/industry/demand' },
-    { label: 'Campus Connect', href: '/industry/campus' },
-];
-
-const NAV_GOVERNMENT = [
-    { label: 'Overview', href: '/government' },
-    { label: 'Region Heatmap', href: '/government/heatmap' },
-    { label: 'Fund Targeting', href: '/government/fund-targeting' },
-    { label: 'Compliance', href: '/government/compliance' },
-];
-
-const NAV_ADMIN = [
-    { label: 'Overview', href: '/admin' },
-    { label: 'Users', href: '/admin/users' },
-    { label: 'Institutes', href: '/admin/institutes' },
-    { label: 'Fairness', href: '/admin/fairness' },
-    { label: 'Audit Logs', href: '/admin/audit-logs' },
-    { label: 'Reports', href: '/admin/reports' },
-];
-
-const NAV_DATA = [
-    { group: 'Student', accent: GOLD, routes: NAV_STUDENT },
-    { group: 'Institute', accent: '#a78bfa', routes: NAV_INSTITUTE },
-    { group: 'Industry', accent: '#34d399', routes: NAV_INDUSTRY },
-    { group: 'Government', accent: AMBER, routes: NAV_GOVERNMENT },
-    { group: 'Admin', accent: '#f87171', routes: NAV_ADMIN },
-];

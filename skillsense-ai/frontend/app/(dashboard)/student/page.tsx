@@ -1,41 +1,18 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import {
     RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer,
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
 import { sampleStudents } from '../../../data/sampleStudents';
 import { downloadPageAsPDF } from '../../../utils/downloadPDF';
-import { useAuth } from '@/hooks/useAuth';
-import { useApi } from '@/hooks/useApi';
-import { AssessmentHistory, ChatMessage } from '@/types/api';
 
 const S = sampleStudents[0];
-const GOLD   = '#D4A843';
+const GOLD = '#D4A843';
 const GOLD_L = '#F0C05A';
-const AMBER  = '#F59E0B';
+const AMBER = '#F59E0B';
 const ORANGE = '#F97316';
-const GREEN  = '#22c55e';
-const INDIGO = '#6366f1';
-
-/* [MOCK] Recommended courses */
-const COURSES = [
-    { title: 'React 18 Advanced Patterns', instructor: 'Rohit Sharma', duration: '12h', level: 'Advanced', color: GOLD, progress: 68 },
-    { title: 'System Design Masterclass', instructor: 'Priya Patel', duration: '18h', level: 'Advanced', color: INDIGO, progress: 0 },
-    { title: 'AWS Cloud Practitioner', instructor: 'Anil Kumar', duration: '10h', level: 'Intermediate', color: '#34d399', progress: 30 },
-    { title: 'Go Lang for Backend', instructor: 'Divya Mehta', duration: '8h', level: 'Intermediate', color: ORANGE, progress: 0 },
-];
-
-/* [MOCK] Activity feed */
-const ACTIVITY = [
-    { icon: '🎯', text: 'Completed "TypeScript Generics" lesson', time: '2h ago', color: GREEN },
-    { icon: '🏅', text: 'Earned React.js Skill Badge', time: '1d ago', color: GOLD },
-    { icon: '📊', text: 'AI Assessment updated your Skill Score to 74', time: '2d ago', color: INDIGO },
-    { icon: '💼', text: 'Job match found: Senior Dev @ Razorpay (86%)', time: '3d ago', color: AMBER },
-    { icon: '📝', text: 'Started "System Design Masterclass"', time: '4d ago', color: '#a78bfa' },
-];
 
 const TABS = [
     { key: 'overview', label: 'Overview' },
@@ -86,60 +63,28 @@ const Tip = ({ active, payload, label }: any) => {
 };
 
 export default function StudentPage() {
-    const { user, isLoading: authLoading } = useAuth();
-    const { data: assessmentHistory, isLoading: assessmentsLoading } = useApi<AssessmentHistory[]>('/assessments/history');
-    const { data: chatHistory, isLoading: chatLoading } = useApi<{ messages: ChatMessage[] }>('/ai/history');
-    
     const [active, setActive] = useState<string>('overview');
-    const [greeting, setGreeting] = useState('');
+    const [userName, setUserName] = useState(S.name);
 
     useEffect(() => {
-        const h = new Date().getHours();
-        setGreeting(h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening');
+        try {
+            const stored = localStorage.getItem('ss_user');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                if (parsed.name) setUserName(parsed.name);
+            }
+        } catch { }
     }, []);
-
-    const firstName = user?.name?.split(' ')[0] || 'Student';
-    const lastLoginFormatted = user?.lastLogin ? new Date(user.lastLogin).toLocaleString('en-IN', {
-        day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
-    }) : 'First time login';
-
-    if (authLoading) return <div style={{ padding: 40, color: '#64748b' }}>Loading your dashboard...</div>;
 
     return (
         <div>
-            {/* ── Welcome Banner ── */}
-            <div style={{ background: 'linear-gradient(135deg, rgba(212,168,67,0.08), rgba(99,102,241,0.06))', border: '1px solid rgba(212,168,67,0.15)', borderRadius: 16, padding: '24px 28px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
-                <div>
-                    <h1 style={{ fontSize: 24, fontWeight: 800, color: '#fff', margin: 0, fontFamily: 'Space Grotesk, sans-serif' }}>
-                        {greeting}, <span style={{ color: GOLD }}>{firstName}!</span> 👋
-                    </h1>
-                    <p style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>
-                        Last login: <span style={{ color: AMBER, fontWeight: 600 }}>{lastLoginFormatted}</span>
-                    </p>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                    {/* Circular AI Skill Score */}
-                    <div style={{ textAlign: 'center' }}>
-                        <div style={{ position: 'relative', width: 80, height: 80 }}>
-                            <svg viewBox="0 0 36 36" style={{ width: 80, height: 80, transform: 'rotate(-90deg)' }}>
-                                <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(212,168,67,0.12)" strokeWidth="3" />
-                                <circle cx="18" cy="18" r="15" fill="none" stroke={GOLD} strokeWidth="3"
-                                    strokeDasharray={`${S.overallScore * 0.942} 94.2`} strokeLinecap="round"
-                                    style={{ transition: 'stroke-dasharray 1s ease' }} />
-                            </svg>
-                            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                                <span style={{ fontSize: 18, fontWeight: 900, color: '#fff' }}>{S.overallScore}</span>
-                                <span style={{ fontSize: 8, color: '#64748b' }}>/100</span>
-                            </div>
-                        </div>
-                        <div style={{ fontSize: 10, color: '#64748b', marginTop: 4, fontWeight: 600 }}>AI SKILL SCORE</div>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        <div style={{ fontSize: 12, color: '#94a3b8' }}><span style={{ color: GREEN, fontWeight: 700 }}>↑ Top 15%</span> of your batch</div>
-                        <div style={{ fontSize: 12, color: '#94a3b8' }}>NSQF Level <span style={{ color: GOLD, fontWeight: 700 }}>{S.nsqfLevel}</span></div>
-                        <div style={{ fontSize: 12, color: '#94a3b8' }}>Career Match <span style={{ color: INDIGO, fontWeight: 700 }}>86%</span></div>
-                    </div>
-                </div>
+            <div style={{ marginBottom: 24 }}>
+                <h1 className="font-display" style={{ fontSize: 26, fontWeight: 800, color: '#fff' }}>
+                    Student Dashboard
+                </h1>
+                <p style={{ color: '#64748b', fontSize: 14, marginTop: 4 }}>
+                    Welcome back, {userName}
+                </p>
             </div>
 
             {/* Tabs */}
@@ -161,21 +106,18 @@ export default function StudentPage() {
             {/* ── OVERVIEW ── */}
             {active === 'overview' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                    {/* Progress cards */}
+                    {/* KPI cards */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
                         {[
-                            { label: 'Courses Enrolled', value: '4', icon: '📚', color: GOLD, sub: '2 in progress' },
-                            { label: 'Completed', value: '2', icon: '✅', color: GREEN, sub: 'this month' },
-                            { label: 'Certificates', value: '3', icon: '🏅', color: INDIGO, sub: 'verified' },
-                            { label: 'Skill Score', value: `${S.overallScore}/100`, icon: '🧠', color: AMBER, sub: '↑ +3 this week' },
+                            { label: 'Overall Skill Score', value: `${S.overallScore}/100`, color: GOLD },
+                            { label: 'Placement Status', value: S.placementStatus === 'placed' ? 'Placed' : 'Seeking', color: '#22c55e' },
+                            { label: 'Skills Assessed', value: `${S.skills.length}`, color: AMBER },
+                            { label: 'NSQF Level', value: `Level ${S.nsqfLevel}`, color: ORANGE },
                         ].map((stat, i) => (
-                            <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${stat.color}22`, borderRadius: 12, padding: '18px 16px' }}>
-                                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
-                                    <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{stat.label}</div>
-                                    <span style={{ fontSize: 18 }}>{stat.icon}</span>
-                                </div>
-                                <div style={{ fontSize: 26, fontWeight: 900, color: '#fff', fontFamily: 'Space Grotesk, sans-serif' }}>{stat.value}</div>
-                                <div style={{ fontSize: 11, color: stat.color, marginTop: 6, fontWeight: 600 }}>{stat.sub}</div>
+                            <div key={i} className="stat-card">
+                                <div style={{ width: 4, height: 28, borderRadius: 2, background: stat.color, marginBottom: 14 }} />
+                                <div className="font-display" style={{ fontSize: 22, fontWeight: 800, color: '#fff' }}>{stat.value}</div>
+                                <div style={{ fontSize: 12, color: '#64748b', marginTop: 5 }}>{stat.label}</div>
                             </div>
                         ))}
                     </div>
@@ -228,11 +170,11 @@ export default function StudentPage() {
                     </div>
 
                     {/* AI Insights */}
-                    <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: '20px' }}>
+                    <div className="stat-card">
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
                             <div style={{ width: 4, height: 20, borderRadius: 2, background: GOLD }} />
-                            <h3 style={{ fontSize: 13, fontWeight: 700, color: '#fff', fontFamily: 'Space Grotesk, sans-serif' }}>AI Insights</h3>
-                            <span style={{ marginLeft: 'auto', fontSize: 11, color: GOLD, background: 'rgba(212,168,67,0.1)', padding: '3px 10px', borderRadius: 99, fontWeight: 600 }}>Gemini AI</span>
+                            <h3 className="font-display" style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>AI Insights</h3>
+                            <span style={{ marginLeft: 'auto', fontSize: 11, color: GOLD, background: 'rgba(212,168,67,0.1)', padding: '3px 10px', borderRadius: 99 }}>Gemini AI</span>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                             {[
@@ -240,105 +182,14 @@ export default function StudentPage() {
                                 `With ${S.overallScore}/100 overall and NSQF Level ${S.nsqfLevel}, you qualify for premium industry openings in ${S.state}.`,
                                 `AI/ML Engineer roles are seeing 220% demand surge — consider an upskilling certification aligned to your ${S.program} background.`,
                             ].map((insight, i) => (
-                                <div key={i} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', padding: '12px 14px', borderRadius: 10, display: 'flex', gap: 10 }}>
+                                <div key={i} className="glass" style={{ padding: '12px 14px', borderRadius: 10, display: 'flex', gap: 10 }}>
                                     <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(212,168,67,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: GOLD, flexShrink: 0 }}>
                                         {i + 1}
                                     </div>
-                                    <p style={{ color: '#cbd5e1', fontSize: 13, lineHeight: 1.65, margin: 0 }}>{insight}</p>
+                                    <p style={{ color: '#cbd5e1', fontSize: 13, lineHeight: 1.65 }}>{insight}</p>
                                 </div>
                             ))}
                         </div>
-                    </div>
-
-                    {/* Recommended courses [MOCK] */}
-                    <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: '20px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                            <div>
-                                <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', fontFamily: 'Space Grotesk, sans-serif' }}>Recommended Courses <span style={{ fontSize: 10, color: AMBER, fontWeight: 600 }}>[MOCK]</span></div>
-                                <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Personalized for your skill gaps</div>
-                            </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 8 }}>
-                            {COURSES.map((c, i) => (
-                                <div key={i} style={{ minWidth: 200, background: 'rgba(255,255,255,0.03)', border: `1px solid ${c.color}22`, borderRadius: 12, padding: 16, flexShrink: 0 }}>
-                                    <div style={{ width: 36, height: 36, borderRadius: 10, background: `${c.color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, marginBottom: 10 }}>📘</div>
-                                    <div style={{ fontSize: 12, fontWeight: 700, color: '#fff', marginBottom: 4, lineHeight: 1.4 }}>{c.title}</div>
-                                    <div style={{ fontSize: 11, color: '#64748b', marginBottom: 10 }}>{c.instructor} · {c.duration} · {c.level}</div>
-                                    {c.progress > 0 ? (
-                                        <>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginBottom: 4 }}>
-                                                <span>Progress</span><span style={{ color: c.color }}>{c.progress}%</span>
-                                            </div>
-                                            <div style={{ height: 4, background: 'rgba(255,255,255,0.05)', borderRadius: 2, overflow: 'hidden' }}>
-                                                <div style={{ height: '100%', width: `${c.progress}%`, background: c.color, borderRadius: 2 }} />
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <div style={{ fontSize: 11, color: c.color, fontWeight: 600 }}>Start learning →</div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Recent Activity + Career Match */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
-                        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: '20px' }}>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', fontFamily: 'Space Grotesk, sans-serif', marginBottom: 16 }}>Recent Activity <span style={{ fontSize: 10, color: AMBER }}>[MOCK]</span></div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                {ACTIVITY.map((a, i) => (
-                                    <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                                        <div style={{ width: 30, height: 30, borderRadius: 8, background: `${a.color}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>{a.icon}</div>
-                                        <div>
-                                            <div style={{ fontSize: 12, color: '#cbd5e1', lineHeight: 1.5 }}>{a.text}</div>
-                                            <div style={{ fontSize: 10, color: '#475569', marginTop: 2 }}>{a.time}</div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: '20px' }}>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', fontFamily: 'Space Grotesk, sans-serif', marginBottom: 4 }}>Career Match <span style={{ fontSize: 10, color: AMBER }}>[MOCK]</span></div>
-                            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 16 }}>Top roles that match your current skills</div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                                {[
-                                    { role: 'AI/ML Engineer', match: 62, color: ORANGE },
-                                ].map((c, i) => (
-                                    <div key={i}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 5 }}>
-                                            <span style={{ color: '#94a3b8' }}>{c.role}</span>
-                                            <span style={{ color: c.color, fontWeight: 700 }}>{c.match}%</span>
-                                        </div>
-                                        <div style={{ height: 5, background: 'rgba(255,255,255,0.05)', borderRadius: 3, overflow: 'hidden' }}>
-                                            <div style={{ height: '100%', width: `${c.match}%`, background: `linear-gradient(90deg, ${c.color}, ${c.color}88)`, borderRadius: 3, transition: 'width 1s ease' }} />
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Real Assessment History */}
-                    <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: '20px' }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', fontFamily: 'Space Grotesk, sans-serif', marginBottom: 16 }}>Assessment History</div>
-                        {assessmentsLoading ? <div style={{ color: '#64748b', fontSize: 12 }}>Loading history...</div> : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                {assessmentHistory?.length === 0 ? (
-                                    <p style={{ color: '#64748b', fontSize: 12 }}>No assessments taken yet. <Link href="/student/assessment" style={{ color: GOLD }}>Take one now</Link></p>
-                                ) : assessmentHistory?.map((as, i) => (
-                                    <div key={as._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                        <div>
-                                            <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{as.category}</div>
-                                            <div style={{ fontSize: 11, color: '#64748b' }}>{new Date(as.completedAt).toLocaleDateString()}</div>
-                                        </div>
-                                        <div style={{ textAlign: 'right' }}>
-                                            <div style={{ fontSize: 14, fontWeight: 800, color: GOLD }}>{as.score}/{as.totalQuestions}</div>
-                                            <div style={{ fontSize: 10, color: GREEN }}>Completed</div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
                     </div>
                 </div>
             )}

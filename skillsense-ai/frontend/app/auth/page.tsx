@@ -1,14 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import type React from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useAuthStore } from '../../store/authStore';
+import { useRouter } from 'next/navigation';
 import './auth.css';
 
-
 /* ── SVG Icons for each role ─────────────────────────────── */
-const RoleIcons: Record<string, React.ReactElement> = {
+const RoleIcons: Record<string, React.ReactNode> = {
     student: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M22 10v6M2 10l10-5 10 5-10 5z" /><path d="M6 12v5c0 1 2 3 6 3s6-2 6-3v-5" />
@@ -67,9 +64,6 @@ function Particles() {
 
 export default function AuthPage() {
     const router = useRouter();
-    const searchParams = useSearchParams();
-    const { login, register: registerUser } = useAuthStore();
-
     const [selected, setSelected] = useState<string | null>(null);
     const [tab, setTab] = useState<'signin' | 'signup'>('signin');
     const [name, setName] = useState('');
@@ -79,99 +73,29 @@ export default function AuthPage() {
     const [showOverlay, setShowOverlay] = useState(false);
     const [overlayOut, setOverlayOut] = useState(false);
     const [toast, setToast] = useState<string | null>(null);
-    const [toastType, setToastType] = useState<'success' | 'error'>('success');
-    const [submitting, setSubmitting] = useState(false);
-    const redirectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const redirectRef = useRef<NodeJS.Timeout | null>(null);
 
     const selectedRole = ROLES.find(r => r.key === selected);
 
-    const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
-        setToast(msg);
-        setToastType(type);
-        setTimeout(() => setToast(null), 4000);
-    };
-
-    // ── Demo auto-login ───────────────────────────────────────────────────────
-    useEffect(() => {
-        const demoRole = searchParams.get('demo');
-        if (!demoRole) return;
-
-        const DEMO = {
-            student:    { email: 'student@skillsense.demo',    password: 'Demo@1234', role: 'student' },
-            admin:      { email: 'admin@skillsense.demo',      password: 'Demo@1234', role: 'admin' },
-            instructor: { email: 'instructor@skillsense.demo', password: 'Demo@1234', role: 'instructor' },
-        } as const;
-
-        const creds = DEMO[demoRole as keyof typeof DEMO];
-        if (!creds) return;
-
-        // Pre-fill
-        setEmail(creds.email);
-        setPassword(creds.password);
-        setSelected(creds.role === 'instructor' ? 'student' : creds.role); // map instructor → student role button
-        setTab('signin');
-
-        // Auto-submit after 800ms so user sees what's happening
-        const timer = setTimeout(() => {
-            login(creds.email, creds.password)
-                .then(() => {
-                    const roleHref = creds.role === 'admin' ? '/admin' : creds.role === 'instructor' ? '/student' : '/student';
-                    localStorage.setItem('ss_user', JSON.stringify({ name: `Demo ${creds.role.charAt(0).toUpperCase() + creds.role.slice(1)}`, role: creds.role, email: creds.email, isDemo: true }));
-                    setShowOverlay(true);
-                    setTimeout(() => { setOverlayOut(true); setTimeout(() => { router.push(roleHref); }, 400); }, 2000);
-                })
-                .catch(() => {
-                    showToast('Demo login failed. Run: npm run seed:demo in backend first.', 'error');
-                });
-        }, 800);
-        return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    const handleSubmit = async (e?: React.FormEvent) => {
+    const handleSubmit = (e?: React.FormEvent) => {
         e?.preventDefault();
-        if (submitting) return;
-
         const role = selectedRole?.key || 'student';
-
-        setSubmitting(true);
-        try {
-            if (tab === 'signin') {
-                await login(email, password);
-            } else {
-                await registerUser(name, email, password, role as import('../../store/authStore').UserRole);
-            }
-
-            // Persist display info for the sidebar
-            const userName = name.trim() || email.split('@')[0] || 'User';
-            localStorage.setItem('ss_user', JSON.stringify({ name: userName, role, email }));
-
-            // Show the animated sign-in overlay
-            setShowOverlay(true);
-            redirectRef.current = setTimeout(() => {
-                setOverlayOut(true);
-                setTimeout(() => {
-                    setShowOverlay(false);
-                    setOverlayOut(false);
-                    showToast('Signed in successfully');
-                    // Respect the ?redirect= param set by middleware, else go to role dashboard
-                    const redirectTo = searchParams.get('redirect') || selectedRole?.href || `/${role}`;
-                    router.push(redirectTo);
-                }, 400);
-            }, 2000);
-
-        } catch (err: unknown) {
-            const msg = (err as { response?: { data?: { message?: string } } })
-                ?.response?.data?.message ?? 'Sign in failed. Please check your credentials.';
-            showToast(msg, 'error');
-        } finally {
-            setSubmitting(false);
-        }
+        const userName = name.trim() || email.split('@')[0] || 'User';
+        localStorage.setItem('ss_user', JSON.stringify({ name: userName, role, email }));
+        setShowOverlay(true);
+        redirectRef.current = setTimeout(() => {
+            setOverlayOut(true);
+            setTimeout(() => {
+                setShowOverlay(false);
+                setOverlayOut(false);
+                setToast('Signed in successfully');
+                setTimeout(() => setToast(null), 3000);
+                router.push(selectedRole?.href || '/student');
+            }, 400);
+        }, 3000);
     };
 
     useEffect(() => () => { if (redirectRef.current) clearTimeout(redirectRef.current); }, []);
-
-
 
     return (
         <>
@@ -275,13 +199,11 @@ export default function AuthPage() {
                             </label>
                         )}
 
-                        <button type="submit" className="auth-btn" disabled={submitting} style={{ opacity: submitting ? 0.75 : 1 }}>
-                            <span>{submitting ? 'Signing in…' : (tab === 'signin' ? `Sign In${selectedRole ? ` as ${selectedRole.label}` : ''}` : 'Create Account')}</span>
-                            {!submitting && (
-                                <span style={{ display: 'flex', alignItems: 'center', transition: 'transform 0.2s' }}>
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
-                                </span>
-                            )}
+                        <button type="submit" className="auth-btn">
+                            <span>{tab === 'signin' ? `Sign In${selectedRole ? ` as ${selectedRole.label}` : ''}` : 'Create Account'}</span>
+                            <span style={{ display: 'flex', alignItems: 'center', transition: 'transform 0.2s' }}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+                            </span>
                             <span className="auth-btn-shimmer" />
                         </button>
                     </form>
@@ -291,13 +213,7 @@ export default function AuthPage() {
 
                     {/* Social */}
                     <div className="auth-socials">
-                        {/* TODO: re-enable Google Auth */}
-                        {/*
-                        <button
-                            type="button"
-                            className="auth-social-btn"
-                            onClick={() => { window.location.href = process.env.NEXT_PUBLIC_GOOGLE_AUTH_URL ?? 'http://localhost:5000/api/v1/auth/google'; }}
-                        >
+                        <button type="button" className="auth-social-btn" onClick={handleSubmit}>
                             <svg width="18" height="18" viewBox="0 0 24 24">
                                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
                                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
@@ -306,12 +222,7 @@ export default function AuthPage() {
                             </svg>
                             Google
                         </button>
-                        */}
-                        <button
-                            type="button"
-                            className="auth-social-btn"
-                            onClick={() => { window.location.href = process.env.NEXT_PUBLIC_GITHUB_AUTH_URL ?? 'http://localhost:5000/api/v1/auth/github'; }}
-                        >
+                        <button type="button" className="auth-social-btn" onClick={handleSubmit}>
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.2 11.38.6.1.82-.26.82-.58v-2.03c-3.34.72-4.04-1.6-4.04-1.6-.54-1.38-1.33-1.74-1.33-1.74-1.09-.74.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49 1 .1-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.14-.3-.54-1.52.1-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 3-.4c1.02.005 2.04.138 3 .4 2.28-1.55 3.29-1.23 3.29-1.23.65 1.66.24 2.88.12 3.18.77.84 1.23 1.91 1.23 3.22 0 4.61-2.8 5.63-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58C20.57 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z" />
                             </svg>
@@ -350,7 +261,7 @@ export default function AuthPage() {
 
             {/* Toast */}
             {toast && (
-                <div className="auth-toast" style={{ background: toastType === 'error' ? 'rgba(239,68,68,0.15)' : undefined, borderColor: toastType === 'error' ? 'rgba(239,68,68,0.4)' : undefined, color: toastType === 'error' ? '#fca5a5' : undefined }}>{toast}</div>
+                <div className="auth-toast">{toast}</div>
             )}
         </>
     );
